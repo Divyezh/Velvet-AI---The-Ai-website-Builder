@@ -1,0 +1,238 @@
+Build a no-auth AI website generator for testing. User types a prompt and gets a fully generated website preview instantly. No login, no signup, no credits, no database needed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT TO BUILD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+A single page at /builder route with:
+- Left panel: prompt input + controls
+- Right panel: live iframe preview of the generated website
+- No auth, no DB, no credits — works immediately for anyone
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. API ROUTE — app/api/generate/route.ts
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create app/api/generate/route.ts
+
+Method: POST
+No authentication required.
+Body: { prompt: string }
+
+Logic:
+  open ai 
+nvidia ai api keys 
+
+  Call claude-sonnet-4-20250514 with this system prompt:
+  ---
+  You are an expert web developer and UI designer. When given a description, 
+  you generate a complete, beautiful, single-file HTML website.
+
+  STRICT RULES:
+  - Return ONLY raw HTML. No markdown. No code blocks. No explanation.
+  - Everything in one HTML file: HTML + CSS in <style> + JS in <script>
+  - Make it visually stunning — use modern design, good typography, real content
+  - Use Google Fonts (import via @import in style tag)
+  - Make it fully responsive (mobile + desktop)
+  - Add realistic placeholder content — real paragraphs, real section names
+  - Include a navbar, hero section, at least 2-3 more sections, and a footer
+  - Use a color palette that fits the website's purpose
+  - NO external CSS frameworks. Pure CSS only.
+  - Do NOT include any JavaScript that requires a backend
+  - The HTML must be complete and render perfectly in an iframe
+  ---
+
+  User message: `Build a complete website for: ${prompt}`
+
+  Stream the response back using Next.js streaming:
+    Return new Response with ReadableStream
+    Use client.messages.stream() for streaming
+    Pipe text chunks directly to the stream
+    On stream end, close the ReadableStream controller
+
+  Error handling:
+    If ANTHROPIC_API_KEY missing: return 500 { error: "API key not configured" }
+    If prompt empty or < 5 chars: return 400 { error: "Prompt too short" }
+    If prompt > 1000 chars: return 400 { error: "Prompt too long" }
+    Wrap in try/catch, return 500 on any Anthropic error
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. BUILDER PAGE — app/builder/page.tsx
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Create app/builder/page.tsx as "use client"
+
+LAYOUT: Full viewport height, dark theme matching VELVET.AI (#050505 bg)
+Split into LEFT PANEL (380px fixed width) and RIGHT PANEL (flex: 1)
+
+--- LEFT PANEL ---
+Background: #0d0d0d
+Border-right: 1px solid rgba(255,255,255,0.07)
+Padding: 24px
+Display: flex flex-col gap between sections
+
+Top section:
+  Logo: "VELVET.AI" in Bebas Neue font, color white, with red dot accent
+  Subtitle: "AI Website Builder" in Inter 12px #666
+
+Prompt area:
+  Label: "DESCRIBE YOUR WEBSITE" in 10px letter-spacing uppercase #e8232a
+  Textarea:
+    Placeholder: "e.g. A modern portfolio for a UX designer with dark theme, 
+    showcasing 6 projects, skills section, and contact form..."
+    Background: #111, border: 1px solid #2a2a2a, border-radius: 12px
+    Color: white, font: Inter 14px, padding: 16px
+    Min-height: 140px, resize: none
+    Focus: border-color rgba(232,35,42,0.5), outline none
+    Max characters: 1000, show character count below (e.g. "243 / 1000" in #555 12px)
+
+Quick prompt chips (below textarea):
+  Label: "Quick start:" in #555 11px
+  Show 6 clickable chip buttons that fill the textarea when clicked:
+    "SaaS Landing Page"
+    "Photography Portfolio"  
+    "Restaurant Website"
+    "Startup Agency"
+    "Personal Blog"
+    "E-commerce Store"
+  Chip style: bg #1a1a1a, border 1px solid #2a2a2a, color #888, border-radius 999px
+  padding: 6px 14px, font 12px, cursor pointer
+  Hover: border #e8232a, color white
+  On click: set textarea value to a detailed version of that prompt
+
+Generate button:
+  Full width, height: 48px
+  Background: #e8232a, color white, border-radius: 12px
+  Font: Inter 600 15px, letter-spacing 0.04em
+  Text: "Generate Website →"
+  Loading state text: "Generating..." with animated dots (CSS animation)
+  Disabled when: textarea empty OR currently generating
+  Disabled style: bg #2a2a2a, color #555, cursor not-allowed
+  Hover (when active): bg #c41c22, slight scale 1.01
+
+Below button — generation status:
+  When idle: nothing shown
+  When generating: 
+    Show a thin red progress bar at top of left panel (animated shimmer, not real progress)
+    Show status text: "🤖 AI is building your website..." in #888 13px
+    Show elapsed time counter: "12s" updating every second
+  When done:
+    Show: "✓ Generated in 18s" in #22c55e 13px
+
+Bottom of left panel:
+  Divider line
+  Action buttons row (only show after generation):
+    "View Code" button: bg #1a1a1a, border #2a2a2a, color #aaa, rounded
+      On click: opens a modal/drawer showing the raw HTML code with syntax highlight
+    "Download HTML" button: same style
+      On click: triggers browser download of the HTML file
+      Filename: velvet-[timestamp].html
+    "Copy HTML" button: same style
+      On click: copies HTML to clipboard, shows "Copied!" feedback for 2s
+
+  At very bottom: 
+    "⚡ Powered by Claude AI" in #333 11px centered
+
+--- RIGHT PANEL ---
+Background: #080808
+Display: flex flex-col
+
+Top bar (32px height):
+  Background: #0d0d0d, border-bottom: 1px solid rgba(255,255,255,0.05)
+  Left: 3 colored circles (red/yellow/green, 10px each, 6px gap) — like macOS window
+  Center: fake URL bar showing "velvet-preview.local" in #555 12px
+  Right: 
+    Desktop/Mobile toggle (2 icon buttons — monitor icon, phone icon)
+    Active: white icon, inactive: #555
+    On mobile toggle: iframe width shrinks to 390px centered
+
+Main area:
+  When NO generation yet:
+    Show centered empty state:
+      Large icon: a sparkle or wand emoji (48px)
+      Text: "Your website will appear here" Inter 16px #555
+      Subtext: "Describe what you want and click Generate" 13px #333
+
+  When GENERATING:
+    Show a skeleton loading UI that looks like a website being built:
+      Fake navbar skeleton: gray bar with shimmer animation
+      Fake hero skeleton: large gray block with shimmer
+      3 fake card skeletons in a row with shimmer
+      All shimmer: background gradient animating left to right
+      Color: #1a1a1a with #222 shimmer
+
+  When DONE:
+    Show iframe with srcdoc={generatedHTML}
+    Width: 100% (desktop) or 390px centered (mobile mode)
+    Height: 100%
+    border: none
+    No scrollbar on iframe wrapper (overflow hidden), iframe itself scrolls
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. STATE MANAGEMENT (inside builder page)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const [prompt, setPrompt] = useState("")
+const [html, setHtml] = useState("")           // accumulated streamed HTML
+const [isGenerating, setIsGenerating] = useState(false)
+const [elapsedTime, setElapsedTime] = useState(0)
+const [viewMode, setViewMode] = useState<"desktop"|"mobile">("desktop")
+const [showCode, setShowCode] = useState(false)
+
+handleGenerate function:
+  1. setIsGenerating(true), setHtml(""), setElapsedTime(0)
+  2. Start timer interval (setInterval every 1000ms incrementing elapsedTime)
+  3. POST to /api/generate with { prompt }
+  4. Read response as a stream using response.body.getReader()
+  5. Decode chunks with TextDecoder
+  6. Append each chunk to html state: setHtml(prev => prev + chunk)
+  7. React re-renders iframe srcdoc in real time as HTML streams in
+  8. On stream complete: clearInterval, setIsGenerating(false)
+  9. On error: show error toast, setIsGenerating(false)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. CODE VIEWER MODAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When "View Code" clicked, show a modal:
+  Overlay: fixed inset-0, bg rgba(0,0,0,0.85), backdrop-filter blur(4px)
+  Modal: bg #0d0d0d, border 1px solid #2a2a2a, border-radius 16px
+  Size: 80vw × 80vh, centered
+  Header: "Generated HTML" title + X close button
+  Body: <pre> tag with the HTML content
+    Font: monospace 12px, color #c7f0ec (your teal accent)
+    Overflow: auto, padding 20px
+    Background: #080808
+  Footer: "Copy" + "Download" buttons
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. NAVBAR UPDATE — add Builder link
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+In the existing navbar, the "BUILDER" link already exists.
+Make sure it routes to /builder.
+No other navbar changes needed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. ENV REQUIRED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Only one env variable needed for this feature:
+ANTHROPIC_API_KEY=your_key_here
+
+If it is already in .env, no changes needed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IMPORTANT RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- No authentication anywhere in this feature
+- No database calls anywhere in this feature  
+- No session checks, no middleware protection on /builder or /api/generate
+- The iframe srcdoc updates in real time as the stream comes in — do not wait for full response
+- Use model: "claude-sonnet-4-20250514" exactly
+- max_tokens: 8000 (websites can be long)
+- The quick start chips should insert detailed prompts, not just the chip label
+  Example: "SaaS Landing Page" chip inserts:
+  "A modern SaaS landing page for a project management tool. Dark theme with purple accents. 
+   Include: navbar with logo and CTA, hero with headline and demo mockup, features grid 
+   with 6 items, pricing section with 3 tiers, testimonials, and footer."
