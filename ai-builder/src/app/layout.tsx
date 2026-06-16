@@ -1,15 +1,8 @@
 import type { Metadata } from "next";
-import { Bebas_Neue, Inter } from "next/font/google";
+import { Inter } from "next/font/google";
 import Script from "next/script";
 import ChatWidget from "@/app/components/ChatWidget/ChatWidget";
 import "./globals.css";
-
-const bebasNeue = Bebas_Neue({
-  subsets: ["latin"],
-  weight: ["400"],
-  variable: "--font-bebas-neue",
-  display: "swap",
-});
 
 const inter = Inter({
   subsets: ["latin"],
@@ -31,7 +24,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${bebasNeue.variable} ${inter.variable} antialiased`}
+      className={`${inter.variable} antialiased`}
       suppressHydrationWarning
     >
       <head>

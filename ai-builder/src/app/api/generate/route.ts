@@ -1,238 +1,325 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const SYSTEM_PROMPT = `You are an expert web developer and UI designer. When given a description, 
-you generate a complete, beautiful, single-file HTML website.
+const VELVET_REACT_SYSTEM_PROMPT = `
+You are VELVET, the AI core of VELVET.AI — a premium React website builder.
+You generate complete, production-ready React applications from plain English descriptions.
+You are a world-class senior React developer and UI/UX designer.
 
-STRICT RULES:
-- Return ONLY raw HTML. No markdown. No code blocks. No explanation.
-- Everything in one HTML file: HTML + CSS in <style> + JS in <script>
-- Make it visually stunning — use modern design, good typography, real content
-- Use Google Fonts (import via @import in style tag)
-- Make it fully responsive (mobile + desktop)
-- Add realistic placeholder content — real paragraphs, real section names
-- Include a navbar, hero section, at least 2-3 more sections, and a footer
-- Use a color palette that fits the website's purpose
-- NO external CSS frameworks. Pure CSS only.
-- Do NOT include any JavaScript that requires a backend
-- The HTML must be complete and render perfectly in an iframe`;
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT — STRICT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Always respond with a valid JSON object in this exact shape:
+{
+  "files": {
+    "src/App.tsx": "...",
+    "src/App.css": "...",
+    "src/components/ComponentName.tsx": "..."
+  }
+}
+
+Rules:
+- Return ONLY the JSON. No explanation. No markdown. No text before or after.
+- The JSON must be valid and parseable by JSON.parse()
+- src/App.tsx is ALWAYS required
+- src/App.css is ALWAYS required
+- Add extra component files in src/components/ only when the app needs them
+- Do NOT include package.json, vite.config.ts, index.html — those already exist
+- Do NOT include node_modules or any config files
+- All imports must use only: react, react-dom, and packages already in the Vite template
+  Available packages: react, react-dom, lucide-react
+  Do NOT import: axios, framer-motion, react-router-dom, or any other package
+  For routing: use useState to show/hide views — NO react-router-dom
+  For icons: use lucide-react ONLY (already installed)
+  For HTTP: use native fetch() ONLY
+  For animations: use pure CSS transitions and keyframes ONLY
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REACT CODE STANDARDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TypeScript:
+- Use TypeScript (.tsx) for ALL component files
+- Define interfaces for all props and state objects
+- Use proper typing — no "any" unless truly necessary
+- Use React.FC<Props> or function ComponentName(props: Props)
+
+Hooks:
+- useState for all local state
+- useEffect for side effects with proper cleanup
+- useRef for DOM refs and mutable values
+- useMemo / useCallback for expensive computations
+- Custom hooks in src/hooks/ when logic is reusable
+
+Component structure:
+- One component per file
+- Named exports for components, default export for App
+- Props interface defined above the component
+- Keep components under 150 lines — split if larger
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DESIGN INTELLIGENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ALWAYS build visually stunning apps. Never generic. Never plain.
+
+Color system — pick based on app type:
+  Todo / Productivity → dark slate (#0f172a) + violet (#8b5cf6) or clean white + indigo
+  Dashboard / Analytics → #050505 + electric blue (#3b82f6) or green (#10b981)
+  E-commerce → clean white + bold accent (orange #f97316 or red #ef4444)
+  Social / Creative → gradient dark + pink/purple
+  Finance → deep navy (#0f172a) + emerald (#10b981)
+  Health / Fitness → dark + orange (#f97316) or clean white + green
+
+Typography — always use Google Fonts via @import in App.css:
+  Modern/Bold: Inter, Plus Jakarta Sans, DM Sans
+  Display: Space Grotesk, Outfit, Syne
+  Use font-size with rem units, line-height 1.5-1.7 for body text
+
+Layout rules:
+  - CSS Grid for page layout, Flexbox for component alignment
+  - 8px spacing system (8, 16, 24, 32, 48, 64, 96px)
+  - border-radius: 8px small, 12px medium, 16px large, 999px pills
+  - Generous padding — never cramped
+  - Max content width: 1200px centered
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANDATORY APP FEATURES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Every app MUST include:
+
+1. REAL FUNCTIONALITY — not just UI shells
+   - Todo app: add, complete, delete, filter (All/Active/Completed), localStorage persist
+   - Calculator: all operations, keyboard support, history
+   - Weather: fetch from open-meteo.com (free, no API key needed)
+   - Notes: create, edit, delete, search, localStorage
+   - Timer/Pomodoro: start, pause, reset, notifications
+
+2. ANIMATIONS — pure CSS, no libraries
+   - Card entrance: fade up on mount (CSS @keyframes + animation)
+   - Button hover: scale(1.02) + brightness(1.1), 150ms ease
+   - List item add: slide down from top
+   - Delete: fade out + scale down
+   - Page transitions: opacity fade between views
+
+3. EMPTY STATES — when no data:
+   - Centered illustration (CSS-drawn or emoji-based)
+   - Helpful message
+   - Primary action button
+
+4. LOADING STATES — for async operations:
+   - Skeleton UI or spinner
+   - Never show blank white screen
+
+5. ERROR STATES — for failed operations:
+   - Friendly error message
+   - Retry button
+
+6. RESPONSIVE — works on mobile:
+   - Breakpoint at 768px and 480px
+   - Touch-friendly tap targets (min 44px)
+   - No horizontal scroll on mobile
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+APP-SPECIFIC INTELLIGENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TODO APP (your current test case):
+  - Dark theme: bg #0f0f0f, card #1a1a1a, accent violet #8b5cf6
+  - Features: add with Enter key, checkbox complete, delete button, 
+    filter tabs (All / Active / Done), item count, clear completed button
+  - Each todo: checkbox + text + delete icon (lucide Trash2)
+  - Completed: line-through + muted color
+  - LocalStorage: persist todos across page refresh
+  - Drag to reorder (pure CSS + mouse events, no library)
+  - Priority levels: High/Medium/Low with color dots
+
+DASHBOARD APP:
+  - Stats cards with animated number counters (CSS counter-reset trick)
+  - Chart using pure SVG (no chart library)
+  - Data table with sort and filter
+
+CALCULATOR APP:
+  - Full keyboard support (useEffect for keydown events)
+  - History of last 10 calculations
+  - Scientific mode toggle
+
+WEATHER APP:
+  - Fetch from https://api.open-meteo.com/v1/forecast (no API key needed)
+  - Geolocation API for user location
+  - 7-day forecast cards
+  - Weather condition icons using lucide-react
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CSS STANDARDS (App.css)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Always start App.css with:
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --font: 'Inter', sans-serif;
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface-2: #242424;
+    --border: rgba(255,255,255,0.08);
+    --accent: #8b5cf6;
+    --accent-hover: #7c3aed;
+    --text: #ffffff;
+    --text-2: #999999;
+    --text-3: #555555;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 99px; }
+
+  /* Standard animations */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ABSOLUTE RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✗ Never import packages not in the available list
+✗ Never use inline styles — always use CSS classes
+✗ Never leave commented-out code in output
+✗ Never use any as TypeScript type unless unavoidable
+✗ Never create an app that is just static UI with no interactivity
+✗ Never output anything except the JSON files object
+✓ Always make the app actually work end-to-end
+✓ Always include localStorage for data that should persist
+✓ Always handle empty states, loading states, and errors
+✓ Always make it mobile responsive
+✓ Always use lucide-react for icons (already installed)
+✓ Always write clean, readable, well-structured TypeScript
+`;
+
+function parseFilesFromResponse(raw: string): Record<string, string> {
+  try {
+    const cleaned = raw
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+    const parsed = JSON.parse(cleaned);
+    if (parsed.files) return parsed.files;
+    if (typeof parsed === "object") return parsed;
+  } catch (_) {}
+
+  const files: Record<string, string> = {};
+  const appTsxMatch = raw.match(/```(?:tsx?|jsx?)\s*([\s\S]*?)```/);
+  if (appTsxMatch) {
+    files["src/App.tsx"] = appTsxMatch[1].trim();
+  }
+  const cssMatch = raw.match(/```css\s*([\s\S]*?)```/);
+  if (cssMatch) {
+    files["src/App.css"] = cssMatch[1].trim();
+  }
+  return files;
+}
 
 export async function POST(req: NextRequest) {
   try {
     const { prompt } = await req.json();
 
-    // 1. Validation checks
-    if (!prompt || typeof prompt !== "string") {
-      return new Response(JSON.stringify({ error: "Prompt is required" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!prompt?.trim()) {
+      return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
-    if (prompt.trim().length < 5) {
-      return new Response(JSON.stringify({ error: "Prompt too short (must be at least 5 characters)" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    if (prompt.length > 1000) {
-      return new Response(JSON.stringify({ error: "Prompt too long (maximum 1000 characters)" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
-    const nvidiaKey = process.env.NVIDIA_API_KEY;
-
-    if (!anthropicKey && !openaiKey && !nvidiaKey) {
-      return new Response(
-        JSON.stringify({ error: "No API key configured. Please set ANTHROPIC_API_KEY, OPENAI_API_KEY, or NVIDIA_API_KEY in your .env file." }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
+    if (!process.env.NVIDIA_API_KEY) {
+      console.error("NVIDIA_API_KEY is not set in environment");
+      return NextResponse.json(
+        { success: false, error: "API key not configured" },
+        { status: 500 }
       );
     }
 
-    let apiEndpoint = "";
-    let headers: Record<string, string> = {};
-    let requestBody: any = {};
-    let provider: "nvidia" | "anthropic" | "openai" = "nvidia";
+    const response = await fetch(
+      "https://integrate.api.nvidia.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.NVIDIA_API_KEY}`,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({
+          model: "minimaxai/minimax-m3",
+          messages: [
+            { role: "system", content: VELVET_REACT_SYSTEM_PROMPT },
+            { role: "user",   content: `Build a complete React app for: ${prompt}` }
+          ],
+          max_tokens: 8192,
+          temperature: 1.00,
+          top_p: 0.95,
+          stream: false,
+        }),
+      }
+    );
 
-    if (nvidiaKey) {
-      provider = "nvidia";
-      // Nvidia AI configuration
-      apiEndpoint = "https://integrate.api.nvidia.com/v1/chat/completions";
-      headers = {
-        "Authorization": `Bearer ${nvidiaKey}`,
-        "content-type": "application/json",
-      };
-      requestBody = {
-        model: "qwen/qwen3-coder-480b-a35b-instruct",
-        max_tokens: 4096,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Build a complete website for: ${prompt}` },
-        ],
-        stream: true,
-      };
-    } else if (anthropicKey) {
-      provider = "anthropic";
-      // Anthropic Claude configuration
-      apiEndpoint = "https://api.anthropic.com/v1/messages";
-      headers = {
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      };
-      requestBody = {
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: `Build a complete website for: ${prompt}` }],
-        stream: true,
-      };
-    } else {
-      provider = "openai";
-      // OpenAI configuration
-      apiEndpoint = "https://api.openai.com/v1/chat/completions";
-      headers = {
-        "Authorization": `Bearer ${openaiKey}`,
-        "content-type": "application/json",
-      };
-      requestBody = {
-        model: "gpt-4o",
-        max_tokens: 4096,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Build a complete website for: ${prompt}` },
-        ],
-        stream: true,
-      };
-    }
-
-    const externalResponse = await fetch(apiEndpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!externalResponse.ok) {
-      const errorText = await externalResponse.text();
-      return new Response(
-        JSON.stringify({ error: `AI Provider responded with status ${externalResponse.status}: ${errorText}` }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
+    if (!response.ok) {
+      const errText = await response.text();
+      return NextResponse.json(
+        { success: false, error: `Nvidia API error: ${errText}` },
+        { status: 502 }
       );
     }
 
-    const externalStream = externalResponse.body;
-    if (!externalStream) {
-      return new Response(JSON.stringify({ error: "Failed to establish AI response stream." }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
+    const data = await response.json();
+    const rawContent = data?.choices?.[0]?.message?.content ?? "";
+
+    if (!rawContent) {
+      return NextResponse.json(
+        { success: false, error: "Empty response from Nvidia" },
+        { status: 500 }
+      );
     }
 
-    // Standard ReadableStream that pipes chunk-parsed content to client
-    const clientStream = new ReadableStream({
-      async start(controller) {
-        const reader = externalStream.getReader();
-        const decoder = new TextDecoder();
-        const encoder = new TextEncoder();
-        let buffer = "";
+    const files = parseFilesFromResponse(rawContent);
 
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+    if (!files || Object.keys(files).length === 0) {
+      return NextResponse.json({ error: "Could not parse files from AI response" }, { status: 500 });
+    }
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              const cleanedLine = line.trim();
-              if (!cleanedLine) continue;
-
-              if (cleanedLine.startsWith("data: ")) {
-                const dataStr = cleanedLine.slice(6);
-                if (dataStr === "[DONE]") continue;
-
-                try {
-                  const dataJson = JSON.parse(dataStr);
-
-                  // Extract text delta based on provider
-                  let textToken = "";
-                  if (provider === "anthropic") {
-                    if (dataJson.type === "content_block_delta" && dataJson.delta?.text) {
-                      textToken = dataJson.delta.text;
-                    }
-                  } else {
-                    if (dataJson.choices?.[0]?.delta?.content) {
-                      textToken = dataJson.choices[0].delta.content;
-                    }
-                  }
-
-                  if (textToken) {
-                    controller.enqueue(encoder.encode(textToken));
-                  }
-                } catch (e) {
-                  // Ignore parse errors on incomplete chunk lines
-                }
-              }
-            }
-          }
-
-          // Read remaining buffer
-          if (buffer && buffer.startsWith("data: ")) {
-            const dataStr = buffer.slice(6);
-            if (dataStr !== "[DONE]") {
-              try {
-                const dataJson = JSON.parse(dataStr);
-                let textToken = "";
-                if (provider === "anthropic") {
-                  if (dataJson.type === "content_block_delta" && dataJson.delta?.text) {
-                    textToken = dataJson.delta.text;
-                  }
-                } else {
-                  if (dataJson.choices?.[0]?.delta?.content) {
-                    textToken = dataJson.choices[0].delta.content;
-                  }
-                }
-                if (textToken) {
-                  controller.enqueue(encoder.encode(textToken));
-                }
-              } catch (e) {}
-            }
-          }
-        } catch (streamError) {
-          controller.error(streamError);
-        } finally {
-          controller.close();
-          reader.releaseLock();
-        }
-      },
-    });
-
-    return new Response(clientStream, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-      },
-    });
+    return NextResponse.json({ success: true, files });
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error?.message || "Internal server error" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("Generate route error:", error);
+    return NextResponse.json(
+      { success: false, error: error.message ?? "Unknown error" },
+      { status: 500 }
+    );
   }
 }

@@ -3,122 +3,61 @@ import { createOrConnectSandbox, writeFile } from '@/lib/e2b';
 
 const STARTER_FILES = {
   '/home/user/app/package.json': `{
-  "name": "vite-react-tailwind",
+  "name": "vite-vanilla-html",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "lucide-react": "^0.395.0"
-  },
   "devDependencies": {
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.4",
-    "typescript": "^5.2.2",
     "vite": "^5.3.1"
   }
 }`,
   '/home/user/app/vite.config.ts': `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react()],
   server: {
     host: '0.0.0.0',
     port: 5173,
     strictPort: true
   }
 });`,
-  '/home/user/app/tailwind.config.js': `/** @type {import('tailwindcss').Config} */
-export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-}`,
-  '/home/user/app/postcss.config.js': `export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-}`,
   '/home/user/app/index.html': `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Website Preview</title>
+    <style>
+      body {
+        background-color: #050505;
+        color: #e8232a;
+        font-family: system-ui, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+      }
+      .container {
+        text-align: center;
+        max-width: 600px;
+        padding: 2rem;
+      }
+      h1 { font-size: 2rem; margin-bottom: 1rem; }
+      p { color: #888; font-size: 1rem; }
+    </style>
   </head>
-  <body class="bg-slate-950 text-white">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>`,
-  '/home/user/app/src/main.tsx': `import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.tsx'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)`,
-  '/home/user/app/src/index.css': `@tailwind base;
-@tailwind components;
-@tailwind utilities;`,
-  '/home/user/app/src/App.tsx': `import React from 'react';
-import { Sparkles, Code, Terminal, Eye } from 'lucide-react';
-
-export default function App() {
-  return (
-    <div className="min-h-screen bg-gradient-` + `to-br from-[#080810] to-[#121225] text-white flex flex-col items-center justify-center p-6 font-sans">
-      <div className="max-w-2xl text-center space-y-8">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-teal-500/10 border border-teal-500/20 text-teal-400 text-sm">
-          <Sparkles className="w-4 h-4 animate-pulse" />
-          <span>Sandbox Ready</span>
-        </div>
-        
-        <h1 className="text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-` + `to-r from-teal-300 to-emerald-400">
-          E2B AI Coding Sandbox
-        </h1>
-        
-        <p className="text-slate-400 text-lg max-w-lg mx-auto">
-          Your isolated development environment is active. The AI agent can now generate and modify files, install packages, and update this live preview in real-time.
-        </p>
-
-        <div className="grid grid-cols-3 gap-4 max-w-md mx-auto">
-          <div className="p-4 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center gap-2 hover:bg-white/10 transition-colors">
-            <Code className="w-6 h-6 text-teal-400" />
-            <span className="text-sm font-semibold">Write Code</span>
-          </div>
-          <div className="p-4 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center gap-2 hover:bg-white/10 transition-colors">
-            <Terminal className="w-6 h-6 text-emerald-400" />
-            <span className="text-sm font-semibold">Run Command</span>
-          </div>
-          <div className="p-4 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center gap-2 hover:bg-white/10 transition-colors">
-            <Eye className="w-6 h-6 text-blue-400" />
-            <span className="text-sm font-semibold">Live Preview</span>
-          </div>
-        </div>
-      </div>
+  <body>
+    <div class="container">
+      <h1>Sandbox Ready</h1>
+      <p>Waiting for Velvet AI to generate your website...</p>
     </div>
-  );
-}`
+  </body>
+</html>`
 };
 
 // Extend route timeout to 60 seconds (default is too short for E2B sandbox creation + file writes)
@@ -147,12 +86,21 @@ export async function POST(req: Request) {
       );
       console.log('All starter files written successfully.');
 
-      // Start npm install && npm run dev in the background
-      console.log('Running npm install && npm run dev in background...');
-      await sandbox.commands.run('npm install && npm run dev', {
+      // Run npm install synchronously so it finishes before we return
+      console.log('Running npm install...');
+      await sandbox.commands.run('npm install', {
+        cwd: '/home/user/app'
+      });
+
+      // Start npm run dev in the background
+      console.log('Running npm run dev in background...');
+      await sandbox.commands.run('npm run dev', {
         cwd: '/home/user/app',
         background: true
       });
+
+      // Give Vite 2 seconds to boot up and bind to port 5173 before returning the proxy URL
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
     // Get the preview URL mapped from Vite port 5173

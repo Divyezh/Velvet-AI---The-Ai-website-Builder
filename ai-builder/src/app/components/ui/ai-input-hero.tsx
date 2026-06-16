@@ -7,7 +7,6 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import gsap from "gsap";
-import { MiniNavbar } from "@/app/components/ui/mini-navbar";
 
 export type HeroWaveProps = {
   className?: string;
@@ -614,7 +613,6 @@ export function HeroWave({
       style={{ position: "relative", width: "100%", height: "100%", ...style }}
       aria-label="Animated wave background"
     >
-      <MiniNavbar />
       {/* Wave canvas — sits behind everything */}
       <div
         ref={waveRef}
