@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Script from "next/script";
 import ChatWidget from "@/app/components/ChatWidget/ChatWidget";
+import SmoothScroll from "@/app/components/SmoothScroll";
 import "./globals.css";
 
 const inter = Inter({
@@ -63,10 +64,11 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className="min-h-full flex flex-col font-sans relative bg-black-base text-white" suppressHydrationWarning>
-        <div className="noise-overlay"></div>
-        {children}
-        <ChatWidget />
+      <body className="min-h-full flex flex-col relative" suppressHydrationWarning>
+        <SmoothScroll>
+          {children}
+          <ChatWidget />
+        </SmoothScroll>
       </body>
     </html>
   );

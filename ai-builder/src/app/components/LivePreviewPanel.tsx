@@ -106,7 +106,7 @@ export default function LivePreviewPanel({
                 <iframe
                   key={iframeKey}
                   src={previewUrl}
-                  title="E2B Live Preview"
+                  title="Live Preview"
                   className="flex-1 w-full border-none bg-white"
                   sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
                 />

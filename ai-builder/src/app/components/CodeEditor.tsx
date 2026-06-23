@@ -75,7 +75,7 @@ export default function CodeEditor({
           <FileCode className="w-4 h-4 text-teal-400 shrink-0" />
           <span className="text-xs font-mono text-slate-300 font-medium">{filename}</span>
           <span className="text-[10px] text-slate-500 font-mono hidden md:inline truncate max-w-xs">
-            ({filePath.replace('/home/user/app/', '')})
+            ({filePath.replace('/tmp/app/', '')})
           </span>
         </div>
         <div className="flex items-center gap-2">

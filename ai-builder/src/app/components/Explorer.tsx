@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Folder, FolderOpen, File, Plus, Trash2, ChevronDown, ChevronRight, FilePlus, FolderPlus } from 'lucide-react';
-import { FileEntry } from '@/lib/e2b';
+import type { FileEntry } from '@/lib/sandbox';
 
 interface ExplorerProps {
   files: FileEntry[];
@@ -46,7 +46,7 @@ export default function Explorer({
         <div className="flex items-center gap-1">
           <button
             onClick={() => {
-              setNewEntryPath('/home/user/app');
+              setNewEntryPath('/tmp/app');
               setNewEntryType('file');
             }}
             className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
@@ -56,7 +56,7 @@ export default function Explorer({
           </button>
           <button
             onClick={() => {
-              setNewEntryPath('/home/user/app');
+              setNewEntryPath('/tmp/app');
               setNewEntryType('dir');
             }}
             className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
@@ -68,7 +68,7 @@ export default function Explorer({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-1 text-sm font-mono">
-        {newEntryPath === '/home/user/app' && (
+        {newEntryPath === '/tmp/app' && (
           <form onSubmit={handleCreateSubmit} className="flex items-center gap-1 p-1 bg-white/5 rounded">
             {newEntryType === 'file' ? (
               <File className="w-4 h-4 text-teal-400 shrink-0" />
@@ -211,7 +211,7 @@ function FileNode({
               </button>
             </>
           )}
-          {entry.path !== '/home/user/app' && (
+          {entry.path !== '/tmp/app' && (
             <button
               onClick={(e) => {
                 e.stopPropagation();

@@ -236,7 +236,7 @@ function parseFilesFromResponse(raw: string): Record<string, string> {
     const parsed = JSON.parse(cleaned);
     if (parsed.files) return parsed.files;
     if (typeof parsed === "object") return parsed;
-  } catch (_) {}
+  } catch (_) { }
 
   const files: Record<string, string> = {};
   const appTsxMatch = raw.match(/```(?:tsx?|jsx?)\s*([\s\S]*?)```/);
@@ -279,7 +279,7 @@ export async function POST(req: NextRequest) {
           model: "minimaxai/minimax-m3",
           messages: [
             { role: "system", content: VELVET_REACT_SYSTEM_PROMPT },
-            { role: "user",   content: `Build a complete React app for: ${prompt}` }
+            { role: "user", content: `Build a complete React app for: ${prompt}` }
           ],
           max_tokens: 8192,
           temperature: 1.00,
