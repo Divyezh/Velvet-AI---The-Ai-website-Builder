@@ -1,65 +1,39 @@
-import { NextResponse } from 'next/server';
-import { createOrConnectWorkspace, listDirectory, writeFile, readFile, deleteFile, createDirectory } from '@/lib/sandbox';
+import { NextRequest, NextResponse } from "next/server";
+import { Sandbox } from "@e2b/code-interpreter";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const sandboxId = req.nextUrl.searchParams.get("sandboxId");
+  if (!sandboxId) return NextResponse.json({ error: "sandboxId required" }, { status: 400 });
+
   try {
-    const { searchParams } = new URL(req.url);
-    const sandboxId = searchParams.get('sandboxId');
-    const action = searchParams.get('action') || 'list'; // 'list' or 'read'
-    const path = searchParams.get('path') || '/tmp/app';
+    const sb = await Sandbox.connect(sandboxId);
+    const result = await sb.commands.run(`find /app -not -path "*/node_modules/*" -not -path "*/.git/*" -type f | head -100`);
 
-    if (!sandboxId) {
-      return NextResponse.json({ success: false, error: 'sandboxId is required' }, { status: 400 });
-    }
+    // Parse paths into tree structure
+    const paths = (result.stdout ?? "").split("\n").filter(Boolean).map(p => p.replace("/app/", ""));
+    const tree = buildTreeFromPaths(paths);
 
-    const workspace = await createOrConnectWorkspace(sandboxId);
-
-    if (action === 'read') {
-      const content = await readFile(workspace.id, path);
-      return NextResponse.json({ success: true, content });
-    } else {
-      const files = await listDirectory(workspace.id, path);
-      return NextResponse.json({ success: true, files });
-    }
-  } catch (error: any) {
-    console.error('Error in files API route (GET):', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to perform files operation' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true, tree });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
-export async function POST(req: Request) {
-  try {
-    const { sandboxId, action, path, content } = await req.json();
-
-    if (!sandboxId) {
-      return NextResponse.json({ success: false, error: 'sandboxId is required' }, { status: 400 });
+function buildTreeFromPaths(paths: string[]): any[] {
+  const root: any[] = [];
+  for (const path of paths) {
+    const parts = path.split("/");
+    let current = root;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isFile = i === parts.length - 1;
+      let node = current.find((n: any) => n.name === part);
+      if (!node) {
+        node = { name: part, path: parts.slice(0, i + 1).join("/"), type: isFile ? "file" : "folder", children: isFile ? undefined : [] };
+        current.push(node);
+      }
+      if (!isFile) current = node.children;
     }
-    if (!path) {
-      return NextResponse.json({ success: false, error: 'path is required' }, { status: 400 });
-    }
-
-    const workspace = await createOrConnectWorkspace(sandboxId);
-
-    if (action === 'write') {
-      await writeFile(workspace.id, path, content || '');
-      return NextResponse.json({ success: true, message: 'File written successfully' });
-    } else if (action === 'delete') {
-      await deleteFile(workspace.id, path);
-      return NextResponse.json({ success: true, message: 'File deleted successfully' });
-    } else if (action === 'create_dir') {
-      await createDirectory(workspace.id, path);
-      return NextResponse.json({ success: true, message: 'Directory created successfully' });
-    } else {
-      return NextResponse.json({ success: false, error: `Invalid action: ${action}` }, { status: 400 });
-    }
-  } catch (error: any) {
-    console.error('Error in files API route (POST):', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to perform files write operation' },
-      { status: 500 }
-    );
   }
+  return root;
 }

@@ -5,47 +5,60 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Maximize2, Minimize2, Check, RefreshCw } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
+
+const terminalTabs = [
+  { id: "terminal", label: "Terminal" },
+  { id: "build", label: "Build Logs" },
+  { id: "ai", label: "AI Actions" },
+  { id: "deploy", label: "Deploy Logs" }
+];
 
 export default function TerminalPanel() {
   const terminalRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { terminalLines, sandboxId, activeTerminalTab, setActiveTerminalTab } = useIDEStore();
-  const [height, setHeight] = useState(220);
+  const { terminalLines, sandboxId, previewUrl } = useIDEStore();
+  const [height, setHeight] = useState(250);
+  const [activeTab, setActiveTab] = useState("terminal");
+  const [isMinimized, setIsMinimized] = useState(false);
   const isDragging = useRef(false);
   const xtermInstance = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
   const processedLinesCount = useRef(0);
 
+  const buildLogs: string[] = [];
+  const aiActions: string[] = [];
+
+  // Initialize xterm
   useEffect(() => {
-    if (!terminalRef.current) return;
+    if (!terminalRef.current || isMinimized || activeTab !== "terminal") return;
 
     const term = new Terminal({
       theme: {
-        background: '#030202',
-        foreground: '#d4b896',
-        cursor: '#e85d0a',
-        cursorAccent: '#030202',
-        selectionBackground: 'rgba(201,74,10,0.3)',
-        black: '#030202',
-        red: '#e85d0a',
+        background: '#0A0A0A',
+        foreground: '#f5e8d8',
+        cursor: '#FF6B00',
+        cursorAccent: '#0A0A0A',
+        selectionBackground: 'rgba(255,107,0,0.25)',
+        black: '#0A0A0A',
+        red: '#FF6B00',
         green: '#22c55e',
         yellow: '#f0a040',
         blue: '#4ec9b0',
         magenta: '#c586c0',
         cyan: '#9cdcfe',
-        white: '#d4b896',
+        white: '#f5e8d8',
         brightBlack: '#5a3820',
-        brightRed: '#ff7040',
-        brightGreen: '#4ade80',
+        brightRed: '#FF6B00',
+        brightGreen: '#22c55e',
         brightYellow: '#fbbf24',
         brightWhite: '#f5e8d8',
       },
       fontSize: 12,
       fontFamily: '"JetBrains Mono", "Fira Code", monospace',
       fontWeight: '400',
-      lineHeight: 1.5,
+      lineHeight: 1.4,
       cursorBlink: true,
       cursorStyle: 'block',
       scrollback: 2000,
@@ -62,18 +75,24 @@ export default function TerminalPanel() {
     xtermInstance.current = term;
     fitAddon.current = fit;
 
-    const handleResize = () => fit.fit();
+    const handleResize = () => {
+      try {
+        fit.fit();
+      } catch (e) {}
+    };
     window.addEventListener('resize', handleResize);
 
-    // Initial lines if any
+    // Populate initial terminal buffer
     if (terminalLines.length > 0) {
       terminalLines.forEach(line => term.writeln(line));
       processedLinesCount.current = terminalLines.length;
+    } else {
+      term.writeln("\x1b[33m⚡ Velvet AI MicroVM Environment Connected.\x1b[0m");
+      term.writeln("\x1b[32m$ npm run dev\x1b[0m started. Live URL available in preview.\n");
     }
 
     let inputBuffer = '';
     term.onData(async (data) => {
-      // Very basic manual terminal implementation for demo
       term.write(data);
       if (data === '\r') {
         term.write('\n');
@@ -111,23 +130,26 @@ export default function TerminalPanel() {
       window.removeEventListener('resize', handleResize);
       term.dispose();
     };
-  }, []); // Mount once
+  }, [activeTab, isMinimized]);
 
+  // Append new streaming output lines
   useEffect(() => {
-    // Append new lines from store (AI generation output)
-    if (xtermInstance.current && terminalLines.length > processedLinesCount.current) {
+    if (activeTab === "terminal" && xtermInstance.current && terminalLines.length > processedLinesCount.current) {
       const newLines = terminalLines.slice(processedLinesCount.current);
       newLines.forEach(line => xtermInstance.current!.writeln(line));
       processedLinesCount.current = terminalLines.length;
     }
-  }, [terminalLines]);
+  }, [terminalLines, activeTab]);
 
   useEffect(() => {
-    if (fitAddon.current) {
-      // Need a small timeout to allow DOM layout
-      setTimeout(() => fitAddon.current?.fit(), 50);
+    if (fitAddon.current && !isMinimized && activeTab === "terminal") {
+      setTimeout(() => {
+        try {
+          fitAddon.current?.fit();
+        } catch (e) {}
+      }, 50);
     }
-  }, [height]);
+  }, [height, isMinimized, activeTab]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     isDragging.current = true;
@@ -137,10 +159,13 @@ export default function TerminalPanel() {
 
   const handleMouseMove = (e: MouseEvent) => {
     if (!isDragging.current || !containerRef.current) return;
-    const containerRect = containerRef.current.parentElement!.getBoundingClientRect();
+    const parentNode = containerRef.current.parentElement;
+    if (!parentNode) return;
+    const containerRect = parentNode.getBoundingClientRect();
     const newHeight = containerRect.bottom - e.clientY;
-    if (newHeight > 100 && newHeight < containerRect.height - 100) {
+    if (newHeight > 60 && newHeight < containerRect.height - 150) {
       setHeight(newHeight);
+      if (isMinimized) setIsMinimized(false);
     }
   };
 
@@ -153,48 +178,88 @@ export default function TerminalPanel() {
   return (
     <div 
       ref={containerRef}
-      className="flex flex-col shrink-0 bg-[#030202] border-t border-[rgba(201,74,10,0.1)] relative"
-      style={{ height: `${height}px` }}
+      className="flex flex-col w-full bg-[#0A0A0A] border-t border-[rgba(255,107,0,0.1)] relative"
+      style={{ height: isMinimized ? "32px" : `${height}px` }}
     >
       {/* RESIZE HANDLE */}
       <div 
-        className="absolute top-[-2px] left-0 right-0 h-1 cursor-row-resize bg-transparent hover:bg-[rgba(201,74,10,0.2)] active:bg-[#e85d0a] z-10 transition-colors"
+        className="absolute top-[-2px] left-0 right-0 h-1 cursor-row-resize bg-transparent hover:bg-[#FF6B00] active:bg-[#FF6B00] z-10 transition-colors"
         onMouseDown={handleMouseDown}
       ></div>
 
-      {/* TAB BAR */}
-      <div className="flex items-center justify-between h-[32px] bg-[#0a0605] border-b border-[rgba(201,74,10,0.08)] px-3">
+      {/* TERMINAL HEADER TABS */}
+      <div className="flex items-center justify-between h-[32px] bg-[#0A0A0A] border-b border-[rgba(255,107,0,0.08)] px-3 select-none">
         <div className="flex items-center gap-1 h-full pt-1">
-          <div 
-            onClick={() => setActiveTerminalTab(1)}
-            className={`flex items-center gap-2 h-full px-3.5 text-[12px] font-medium rounded-t-md cursor-pointer transition-colors ${
-              activeTerminalTab === 1 ? "bg-[#120b08] text-[#f5e8d8]" : "text-[#5a3820] hover:text-[#a08060]"
-            }`}
-          >
-            Terminal 1
-          </div>
-          
-          <button className="flex items-center justify-center w-[22px] h-[22px] rounded text-[#5a3820] hover:text-[#e85d0a] ml-1 transition-colors">
-            <Plus size={14} />
-          </button>
-          <button className="flex items-center justify-center w-5 h-5 rounded text-[#5a3820] hover:text-[#e85d0a] transition-colors">
-            <Trash2 size={12} />
-          </button>
+          {terminalTabs.map(tab => (
+            <div 
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id);
+                if (isMinimized) setIsMinimized(false);
+              }}
+              className={`flex items-center justify-center h-full px-3.5 text-[11.5px] font-semibold rounded-t-md cursor-pointer transition-colors ${
+                activeTab === tab.id && !isMinimized 
+                  ? "bg-[#111111] text-[#FF6B00] border-t border-t-[#FF6B00]" 
+                  : "text-[#a08060] hover:text-[#f5e8d8]"
+              }`}
+            >
+              {tab.label}
+            </div>
+          ))}
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 text-[11px]">
-            <span className="text-[#5a3820] hover:text-[#a08060] cursor-pointer">Bolt</span>
-            <span className="text-[#5a3820] hover:text-[#a08060] cursor-pointer">Publish Output</span>
-            <span className="text-[#f5e8d8] underline decoration-[#e85d0a] underline-offset-4 cursor-pointer">Terminal</span>
-          </div>
-          <div className="w-px h-3 bg-[rgba(201,74,10,0.2)]"></div>
-          <span className="text-[10px] font-semibold text-[#5a3820] tracking-widest uppercase">TERMINAL — E2B MicroVM</span>
+        {/* Right side controls */}
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-semibold text-[#5a3820] tracking-widest uppercase">
+            {activeTab === "terminal" ? "E2B Linux MicroVM" : `${activeTab.toUpperCase()} PANEL`}
+          </span>
+          <div className="w-px h-3 bg-[rgba(255,107,0,0.15)]"></div>
+          
+          <button 
+            onClick={() => setIsMinimized(!isMinimized)}
+            className="text-[#a08060] hover:text-[#FF6B00] transition-colors p-0.5"
+            title={isMinimized ? "Expand Terminal" : "Minimize Terminal"}
+          >
+            {isMinimized ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+          </button>
         </div>
       </div>
 
-      {/* TERMINAL CONTENT */}
-      <div className="flex-1 w-full overflow-hidden p-2" ref={terminalRef}></div>
+      {/* TERMINAL CONTENT SCREEN */}
+      {!isMinimized && (
+        <div className="flex-1 w-full overflow-hidden bg-[#0A0A0A] flex flex-col min-h-0">
+          {activeTab === "terminal" && <div className="flex-1 w-full overflow-hidden p-2" ref={terminalRef}></div>}
+          {activeTab === "build" && (
+            <div style={{ flex: 1, padding: "12px 16px", fontFamily: "monospace", fontSize: 12, color: "var(--text-2)", overflowY: "auto" }}>
+              {buildLogs.length === 0
+                ? <span style={{ color: "var(--text-3)" }}>No build logs yet.</span>
+                : buildLogs.map((l, i) => <div key={i}>{l}</div>)}
+            </div>
+          )}
+          {activeTab === "ai" && (
+            <div style={{ flex: 1, padding: "12px 16px", fontFamily: "monospace", fontSize: 12, color: "var(--text-2)", overflowY: "auto" }}>
+              {aiActions.length === 0
+                ? <span style={{ color: "var(--text-3)" }}>AI actions will appear here during generation.</span>
+                : aiActions.map((a, i) => <div key={i}>{a}</div>)}
+            </div>
+          )}
+          {activeTab === "deploy" && (
+            <div style={{ flex: 1, padding: "12px 16px", fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-2)" }}>
+              {previewUrl
+                ? <>
+                    <div style={{ color: "var(--green)" }}>✓ Deployed</div>
+                    <div style={{ marginTop: 8 }}>
+                      <a href={previewUrl} target="_blank" rel="noreferrer"
+                        style={{ color: "var(--accent)", textDecoration: "underline" }}>
+                        {previewUrl}
+                      </a>
+                    </div>
+                  </>
+                : <span style={{ color: "var(--text-3)" }}>No deployment yet. Generate a project first.</span>}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

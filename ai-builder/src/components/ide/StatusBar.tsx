@@ -30,7 +30,10 @@ export default function StatusBar() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 text-[#5a3820]">
+        <div 
+          className="flex items-center gap-1.5 text-[#5a3820]"
+          title={sandboxStatus === "ready" ? "Connected" : "Starting development server..."}
+        >
           <Radio size={12} className={sandboxStatus === "ready" ? "text-[#22c55e]" : "text-[#e85d0a]"} />
           <span className="text-[11px]">{sandboxStatus === "ready" ? "Connected" : "Starting..."}</span>
         </div>

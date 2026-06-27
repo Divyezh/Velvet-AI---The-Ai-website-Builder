@@ -1,51 +1,61 @@
-import { NextResponse } from 'next/server';
-import { getE2BSandbox } from '@/lib/e2b-sandbox';
+import { NextRequest } from "next/server";
+import { Sandbox } from "@e2b/code-interpreter";
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const sandboxId = searchParams.get('sandboxId');
+export async function POST(req: NextRequest) {
+  const { sandboxId, command } = await req.json();
 
-  if (!sandboxId) {
-    return NextResponse.json({ error: 'Missing sandboxId' }, { status: 400 });
+  if (!sandboxId || !command?.trim()) {
+    return new Response(
+      JSON.stringify({ error: "sandboxId and command required" }),
+      { status: 400 }
+    );
   }
 
-  try {
-    return NextResponse.json({ lines: [] });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  // Block dangerous commands
+  const BLOCKED = ["rm -rf /", "mkfs", "dd if=", ":(){ :|:& };:", "sudo rm"];
+  if (BLOCKED.some(b => command.includes(b))) {
+    return new Response(
+      JSON.stringify({ error: "Command not allowed" }),
+      { status: 403 }
+    );
   }
-}
 
-export async function POST(req: Request) {
-  const encoder = new TextEncoder();
+  const enc = new TextEncoder();
   const stream = new ReadableStream({
-    async start(controller) {
+    async start(ctrl) {
+      function send(obj: object) {
+        ctrl.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
+      }
+
       try {
-        const { sandboxId, command } = await req.json();
-        const sandbox = await getE2BSandbox(sandboxId);
-        
-        const exec = await sandbox.commands.run(command, {
-          onStdout: (out) => {
-            controller.enqueue(encoder.encode(out + '\n'));
-          },
-          onStderr: (err) => {
-            controller.enqueue(encoder.encode(err + '\n'));
-          }
+        const sandbox = await Sandbox.connect(sandboxId);
+
+        send({ type: "cmd_start", command });
+
+        const result = await sandbox.commands.run(command, {
+          onStdout: (data: string) => send({ type: "stdout", line: data }),
+          onStderr: (data: string) => send({ type: "stderr", line: data }),
+          timeoutMs: 60000, // 60s timeout per command
         });
 
-        controller.close();
-      } catch (error: any) {
-        controller.enqueue(encoder.encode(`Error: ${error.message}\n`));
-        controller.close();
+        send({
+          type: "cmd_done",
+          exitCode: result.exitCode ?? 0,
+          success: (result.exitCode ?? 0) === 0,
+        });
+
+      } catch (err: any) {
+        send({ type: "error", message: err.message });
+      } finally {
+        ctrl.close();
       }
-    }
+    },
   });
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/plain',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
     },
   });
 }

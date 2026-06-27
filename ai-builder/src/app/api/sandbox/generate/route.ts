@@ -1,165 +1,209 @@
-import { getE2BSandbox } from '@/lib/e2b-sandbox';
-import OpenAI from 'openai';
+import { NextRequest } from "next/server";
+import { Sandbox } from "@e2b/code-interpreter";
+import {
+  detectIntent,
+  scanUploadedFiles,
+  buildCommands,
+  generateCode,
+  type UploadedFile,
+} from "@/lib/velvet-agent";
 
-const VELVET_AGENT_SYSTEM_PROMPT = `
-You are VELVET AGENT — a world-class senior full-stack engineer.
-You build complete, production-ready React + TypeScript + Tailwind applications
-from plain English descriptions. You think like a staff engineer at Vercel or Linear.
+export const maxDuration = 300; // 5 min timeout
 
-OUTPUT FORMAT:
-Return ONLY a valid JSON object. No markdown. No explanation. No text before or after.
-Start with { and end with }.
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { prompt, sandboxId, uploadedFiles } = body as {
+    prompt: string;
+    sandboxId: string;
+    uploadedFiles?: UploadedFile[];
+  };
 
-{
-  "plan": [
-    "Set up Vite + React + TypeScript project",
-    "Build component architecture",
-    "Add interactivity and state management",
-    "Style with Tailwind CSS",
-    "Add localStorage persistence"
-  ],
-  "files": {
-    "apps/web/src/App.tsx": "...complete file content...",
-    "apps/web/src/index.css": "...complete file content...",
-    "apps/web/src/components/Header.tsx": "...",
-    "apps/web/src/components/MainContent.tsx": "...",
-    "apps/web/tailwind.config.js": "..."
-  },
-  "commands": [
-    "cd /app/apps/web && npm install -D tailwindcss postcss autoprefixer",
-    "cd /app/apps/web && npx tailwindcss init -p"
-  ],
-  "devCommand": "cd /app/apps/web && npm run dev -- --host 0.0.0.0 --port 5173"
-}
+  const enc = new TextEncoder();
 
-RULES:
-1. Always include a plan array (3-6 steps describing what you're building)
-2. Always include apps/web/src/App.tsx and apps/web/src/index.css
-3. Split into components when a component exceeds 100 lines
-4. Use TypeScript interfaces for all props and state
-5. Use Tailwind CSS for all styling (add config if needed)
-6. Only import: react, react-dom, lucide-react (pre-installed)
-7. For routing: use useState to toggle views — no react-router-dom
-8. For data: use localStorage for persistence, fetch() for APIs
-9. For icons: lucide-react only
-10. Make it ACTUALLY WORK end-to-end — no placeholder TODO comments
-
-QUALITY BAR:
-- Every app must look like it was designed by a senior product designer
-- Dark theme for tech apps, appropriate theme for consumer apps  
-- Every button must do something real
-- Empty states must be beautiful and helpful
-- Loading states must exist for all async operations
-- Error states must exist and show actionable messages
-- Mobile responsive by default
-`;
-
-export async function POST(req: Request) {
-  const { prompt, sandboxId } = await req.json();
-
-  const encoder = new TextEncoder();
-  
   const stream = new ReadableStream({
-    async start(controller) {
-      const emit = (event: any) => {
-        controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
-      };
+    async start(ctrl) {
+      function send(obj: object) {
+        ctrl.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
+      }
 
       try {
-        emit({ type: "thinking", phase: "Analyzing prompt", toolsUsed: 0 });
+        // ── STEP 1: DETECT INTENT ──
+        send({ type: "thinking", phase: "Understanding your request...", toolsUsed: 1 });
 
-        const openai = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY || 'mock',
-          baseURL: process.env.OPENAI_BASE_URL || undefined,
+        const intent = await detectIntent(prompt, uploadedFiles);
+        send({ type: "intent", data: intent });
+        send({ type: "plan_start", steps: buildPlanSteps(intent) });
+
+        // ── STEP 2: SCAN UPLOADED FILES (if any) ──
+        let fileAnalysis = undefined;
+        if (uploadedFiles && uploadedFiles.length > 0) {
+          send({ type: "thinking", phase: `Scanning ${uploadedFiles.length} uploaded file(s)...`, toolsUsed: 2 });
+          fileAnalysis = await scanUploadedFiles(uploadedFiles);
+          send({ type: "file_analysis", data: fileAnalysis });
+          send({
+            type: "agent_message",
+            content: formatFileAnalysis(fileAnalysis),
+          });
+        }
+
+        // ── STEP 3: CONNECT TO SANDBOX ──
+        send({ type: "thinking", phase: "Connecting to sandbox...", toolsUsed: 3 });
+        const sandbox = await Sandbox.connect(sandboxId);
+
+        // ── STEP 4: RUN FRAMEWORK SETUP COMMANDS ──
+        const commands = buildCommands(intent);
+        if (commands.length > 0) {
+          send({ type: "plan_step", index: 0 });
+          send({ type: "thinking", phase: "Setting up project scaffold...", toolsUsed: 4 });
+
+          for (const cmd of commands) {
+            send({ type: "terminal_cmd", cmd });
+
+            const result = await sandbox.commands.run(cmd, {
+              onStdout: (data: string) => send({ type: "terminal_out", line: data }),
+              onStderr: (data: string) => {
+                // Only send actual errors, not npm warnings
+                if (!data.includes("npm warn") && !data.includes("WARN")) {
+                  send({ type: "terminal_out", line: data });
+                }
+              },
+            });
+
+            send({
+              type: "terminal_done",
+              cmd,
+              exitCode: result.exitCode ?? 0,
+            });
+
+            if ((result.exitCode ?? 0) > 0) {
+              throw new Error(`Command failed (exit ${result.exitCode}): ${cmd}`);
+            }
+          }
+        }
+
+        // ── STEP 5: GENERATE CODE WITH AI ──
+        send({ type: "plan_step", index: 1 });
+        send({ type: "thinking", phase: "Generating your app with AI...", toolsUsed: 5 });
+
+        const plan = await generateCode(prompt, intent, fileAnalysis);
+        send({ type: "plan_steps_update", steps: plan.steps });
+
+        // ── STEP 6: WRITE FILES TO SANDBOX ──
+        send({ type: "plan_step", index: 2 });
+        send({ type: "thinking", phase: "Writing project files...", toolsUsed: 6 });
+
+        const fileEntries = Object.entries(plan.files);
+        for (const [filePath, content] of fileEntries) {
+          send({ type: "file_start", path: filePath });
+
+          // Ensure parent directory exists
+          const dir = filePath.split("/").slice(0, -1).join("/");
+          if (dir) {
+            await sandbox.commands.run(`mkdir -p /app/${dir}`);
+          }
+
+          // Write file
+          await sandbox.files.write(`/app/${filePath}`, content);
+
+          // Stream content in chunks for real-time editor feel
+          const chunkSize = 300;
+          for (let i = 0; i < content.length; i += chunkSize) {
+            send({
+              type: "file_chunk",
+              path: filePath,
+              content: content.slice(i, i + chunkSize),
+            });
+          }
+
+          send({ type: "file_done", path: filePath, fullContent: content });
+        }
+
+        // ── STEP 7: APPLY TAILWIND CONFIG (if needed) ──
+        if (intent.framework === "react" && fileEntries.some(([p]) => p.endsWith(".tsx"))) {
+          const twConfig = `/** @type {import('tailwindcss').Config} */
+export default {
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  theme: { extend: {} },
+  plugins: [],
+}`;
+          await sandbox.files.write("/app/web/tailwind.config.js", twConfig);
+          send({ type: "file_done", path: "web/tailwind.config.js", fullContent: twConfig });
+        }
+
+        // ── STEP 8: START DEV SERVER ──
+        send({ type: "plan_step", index: 3 });
+        send({ type: "thinking", phase: "Starting development server...", toolsUsed: 7 });
+        send({ type: "terminal_cmd", cmd: plan.devCommand });
+
+        // Start non-blocking (dev server runs forever)
+        sandbox.commands.run(plan.devCommand, {
+          background: true,
+          onStdout: (data: string) => send({ type: "terminal_out", line: data }),
+          onStderr: (data: string) => send({ type: "terminal_out", line: data }),
         });
 
-        emit({ type: "thinking", phase: "Planning project structure...", toolsUsed: 1 });
+        // Wait for Vite/Next to be ready
+        await new Promise(r => setTimeout(r, 4000));
 
-        let resultText = '';
-        if (process.env.OPENAI_API_KEY) {
-          const response = await openai.chat.completions.create({
-            model: process.env.OPENAI_MODEL || "gpt-4o",
-            messages: [
-              { role: "system", content: VELVET_AGENT_SYSTEM_PROMPT },
-              { role: "user", content: prompt }
-            ],
-            response_format: { type: "json_object" }
-          });
-          resultText = response.choices[0].message.content || '{}';
-        } else {
-          // Mock response if no API key
-          resultText = JSON.stringify({
-            plan: ["Set up project", "Build UI", "Deploy"],
-            files: {
-              "apps/web/src/App.tsx": "export default function App() { return <div className='p-10 text-white'>Hello World</div> }",
-              "apps/web/src/index.css": "@tailwind base;\n@tailwind components;\n@tailwind utilities;\nbody { background: #000; }"
-            },
-            commands: [],
-            devCommand: "cd /app/apps/web && npm run dev -- --host 0.0.0.0 --port 5173"
-          });
-        }
+        const previewUrl = `https://${plan.previewPort}-${sandboxId}.e2b.app`;
+        send({ type: "plan_step", index: 4 });
+        send({ type: "server_ready", url: previewUrl });
 
-        const data = JSON.parse(resultText);
+        // ── DONE ──
+        send({
+          type: "done",
+          previewUrl,
+          filesCreated: fileEntries.map(([p]) => p),
+          summary: intent.summary,
+        });
 
-        emit({ type: "plan", steps: data.plan, current: 0 });
-
-        const sandbox = await getE2BSandbox(sandboxId);
-        
-        emit({ type: "thinking", phase: "Generating files...", toolsUsed: 2 });
-        emit({ type: "plan_update", current: 1 });
-
-        const filesCreated = [];
-        for (const [path, content] of Object.entries(data.files || {})) {
-          emit({ type: "file_start", path });
-          // Ensure directory exists
-          const dir = path.split('/').slice(0, -1).join('/');
-          await sandbox.commands.run(`mkdir -p /app/${dir}`);
-          
-          await sandbox.files.write(`/app/${path}`, content as string);
-          
-          filesCreated.push(path);
-          emit({ type: "file_done", path, fullContent: content });
-        }
-
-        emit({ type: "thinking", phase: "Installing dependencies...", toolsUsed: 3 });
-        emit({ type: "plan_update", current: 2 });
-
-        for (const cmd of (data.commands || [])) {
-          emit({ type: "terminal_cmd", cmd });
-          const exec = await sandbox.commands.run(cmd);
-          if (exec.stdout) {
-            const lines = exec.stdout.split('\n');
-            for (const line of lines) if (line) emit({ type: "terminal_out", line });
-          }
-          if (exec.stderr) {
-             const lines = exec.stderr.split('\n');
-             for (const line of lines) if (line) emit({ type: "terminal_out", line });
-          }
-          emit({ type: "terminal_done", cmd, exitCode: exec.exitCode });
-        }
-
-        emit({ type: "thinking", phase: "Starting dev server...", toolsUsed: 4 });
-        emit({ type: "plan_update", current: data.plan.length - 1 });
-        
-        // We already started it in create, but we can restart or just trigger a reload
-        
-        emit({ type: "server_start", url: `https://5173-${sandbox.sandboxId}.e2b.dev` });
-        emit({ type: "done", previewUrl: `https://5173-${sandbox.sandboxId}.e2b.dev`, filesCreated });
-        
-        controller.close();
-      } catch (error: any) {
-        console.error("Generation error:", error);
-        emit({ type: "error", message: error.message || "Unknown error", recoverable: true });
-        controller.close();
+      } catch (err: any) {
+        console.error("Generation error:", err);
+        send({
+          type: "error",
+          message: err.message ?? "Generation failed",
+          recoverable: true,
+        });
+      } finally {
+        ctrl.close();
       }
-    }
+    },
   });
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'application/x-ndjson',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
     },
   });
+}
+
+function buildPlanSteps(intent: ReturnType<typeof detectIntent> extends Promise<infer T> ? T : never): string[] {
+  return [
+    intent.commands?.length > 0 ? `Scaffold ${intent.framework ?? "React"} project` : "Prepare workspace",
+    "Generate code with VELVET AI",
+    "Write all project files",
+    "Start development server",
+    "App is live ✓",
+  ];
+}
+
+function formatFileAnalysis(analysis: Awaited<ReturnType<typeof scanUploadedFiles>>): string {
+  const lines = [
+    `**Files analyzed.** Here's what I found:\n`,
+    `**Framework:** ${analysis.framework}`,
+    `**Tech stack:** ${analysis.techStack.join(", ") || "Not detected"}`,
+    analysis.existingComponents.length
+      ? `**Components found:** ${analysis.existingComponents.join(", ")}`
+      : "",
+    analysis.issues.length
+      ? `**Issues I'll fix:** ${analysis.issues.slice(0, 3).join(", ")}`
+      : "",
+    analysis.suggestions.length
+      ? `**Improvements I'll add:** ${analysis.suggestions.slice(0, 2).join(", ")}`
+      : "",
+    `\n${analysis.summary}`,
+  ];
+  return lines.filter(Boolean).join("\n");
 }

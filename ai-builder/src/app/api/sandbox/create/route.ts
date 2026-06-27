@@ -1,26 +1,28 @@
 import { NextResponse } from 'next/server';
 import { getE2BSandbox } from '@/lib/e2b-sandbox';
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    const sandbox = await getE2BSandbox();
+    const body = await req.json().catch(() => ({}));
+    const reqSandboxId = body.sandboxId || process.env.E2B || undefined;
+    const sandbox = await getE2BSandbox(reqSandboxId);
 
-    // Scaffold monorepo if not already set up
-    // We check if package.json exists to avoid re-running create vite
-    const { stdout: hasSetup } = await sandbox.commands.run('test -f /app/apps/web/package.json && echo "yes" || echo "no"');
-    
-    if (hasSetup.trim() !== "yes") {
-      await sandbox.commands.run('mkdir -p /app/apps/web /app/packages');
-      await sandbox.commands.run('cd /app && npm init -y');
-      await sandbox.commands.run('cd /app/apps/web && npm create vite@latest . -- --template react-ts --yes');
-      // Start dev server in background
-      sandbox.commands.run('cd /app/apps/web && npm install && npm run dev -- --host 0.0.0.0 --port 5173', { background: true });
-    }
+    // Run scaffolding in the background if not setup to prevent HTTP request timeouts
+    sandbox.commands.run('test -f /app/apps/web/package.json && echo "yes" || echo "no"').then(async (exec) => {
+      if (exec.stdout.trim() !== "yes") {
+        console.log("Scaffolding sandbox in background...");
+        await sandbox.commands.run('mkdir -p /app/apps/web /app/packages');
+        await sandbox.commands.run('cd /app && npm init -y');
+        await sandbox.commands.run('cd /app/apps/web && npm create vite@latest . -- --template react-ts --yes');
+        await sandbox.commands.run('cd /app/apps/web && npm install');
+        sandbox.commands.run('cd /app/apps/web && npm run dev -- --host 0.0.0.0 --port 5173', { background: true });
+      }
+    }).catch(console.error);
 
     return NextResponse.json({
       sandboxId: sandbox.sandboxId,
       previewUrl: `https://5173-${sandbox.sandboxId}.e2b.dev`,
-      fileTree: [] // Mock empty tree initially
+      fileTree: [] // Initial empty tree
     });
   } catch (error) {
     console.error("Sandbox creation error:", error);

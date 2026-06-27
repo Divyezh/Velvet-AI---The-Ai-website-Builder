@@ -2,54 +2,82 @@
 
 import { useIDEStore } from "@/app/sandbox/store";
 import { Folder, Search, GitBranch, Blocks, Rocket, User, Settings } from "lucide-react";
+import { useToast } from "@/components/ide/Toast";
+import { useRouter } from "next/navigation";
 
 export default function IconBar() {
-  const { activeIconPanel, setActiveIconPanel } = useIDEStore();
+  const { activeIconPanel, setActiveIconPanel, previewUrl } = useIDEStore();
+  const { toast } = useToast();
+  const router = useRouter();
+
+  const handleIconClick = (id: string) => {
+    if (id === "explorer") {
+      setActiveIconPanel(activeIconPanel === "explorer" ? null : "explorer");
+    } else if (id === "search") {
+      setActiveIconPanel(activeIconPanel === "search" ? null : "search");
+    } else if (id === "git") {
+      setActiveIconPanel(activeIconPanel === "git" ? null : "git");
+    } else if (id === "extensions") {
+      toast("Extensions coming soon");
+    } else if (id === "deploy") {
+      if (previewUrl) {
+        window.open(previewUrl, "_blank");
+      } else {
+        toast("Generate a project first");
+      }
+    }
+  };
+
+  const handleBottomIconClick = (id: string) => {
+    if (id === "account") {
+      router.push("/");
+    } else if (id === "settings") {
+      toast("Settings coming soon");
+    }
+  };
 
   const icons = [
-    { id: "explorer", icon: Folder, tooltip: "Explorer" },
-    { id: "search", icon: Search, tooltip: "Search" },
+    { id: "explorer", icon: Folder, tooltip: "Workspace Explorer" },
+    { id: "search", icon: Search, tooltip: "Search Workspace" },
     { id: "git", icon: GitBranch, tooltip: "Source Control" },
-    { id: "extensions", icon: Blocks, tooltip: "Extensions" },
-    { id: "deploy", icon: Rocket, tooltip: "Deploy" },
+    { id: "extensions", icon: Blocks, tooltip: "Extensions Panel" },
+    { id: "deploy", icon: Rocket, tooltip: "Cloud Deployments" },
   ];
 
   const bottomIcons = [
-    { id: "account", icon: User, tooltip: "Account" },
-    { id: "settings", icon: Settings, tooltip: "Settings" },
+    { id: "account", icon: User, tooltip: "Account Settings" },
+    { id: "settings", icon: Settings, tooltip: "IDE Settings" },
   ];
 
   return (
-    <div className="flex flex-col items-center w-10 shrink-0 bg-[#0a0605] border-r border-[rgba(201,74,10,0.08)] py-2 gap-1 z-10">
+    <div className="flex flex-col items-center w-12 shrink-0 bg-[#0A0A0A] border-r border-[rgba(255,107,0,0.1)] py-3 gap-2.5 z-10">
       {icons.map((item) => {
         const isActive = activeIconPanel === item.id;
         return (
           <button
             key={item.id}
-            onClick={() => setActiveIconPanel(isActive ? null : item.id as any)}
-            className={`relative flex items-center justify-center w-8 h-8 rounded-md transition-all duration-150 group ${
+            onClick={() => handleIconClick(item.id)}
+            className={`relative flex items-center justify-center w-9 h-9 rounded-md transition-all duration-150 group ${
               isActive 
-                ? "text-[#e85d0a] bg-[rgba(201,74,10,0.1)]" 
-                : "text-[#5a3820] hover:text-[#a08060] hover:bg-[rgba(201,74,10,0.08)]"
+                ? "text-[#FF6B00] bg-[rgba(255,107,0,0.12)] border-l-2 border-[#FF6B00] shadow-[0_0_10px_rgba(255,107,0,0.1)]" 
+                : "text-[#a08060] hover:text-[#FF6B00] hover:bg-[rgba(255,107,0,0.04)]"
             }`}
             title={item.tooltip}
           >
-            {isActive && (
-              <div className="absolute left-[-4px] top-1/2 -translate-y-1/2 w-[2px] h-full bg-[#e85d0a] rounded-r"></div>
-            )}
-            <item.icon size={16} />
+            <item.icon size={17} />
           </button>
         );
       })}
 
-      <div className="mt-auto flex flex-col gap-1">
+      <div className="mt-auto flex flex-col gap-2.5">
         {bottomIcons.map((item) => (
           <button
             key={item.id}
-            className="flex items-center justify-center w-8 h-8 rounded-md text-[#5a3820] hover:text-[#a08060] hover:bg-[rgba(201,74,10,0.08)] transition-all duration-150"
+            onClick={() => handleBottomIconClick(item.id)}
+            className="flex items-center justify-center w-9 h-9 rounded-md text-[#a08060] hover:text-[#FF6B00] hover:bg-[rgba(255,107,0,0.04)] transition-all duration-150"
             title={item.tooltip}
           >
-            <item.icon size={16} />
+            <item.icon size={17} />
           </button>
         ))}
       </div>
